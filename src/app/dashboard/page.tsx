@@ -3,101 +3,180 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { GlassCard } from "@/components/ui/GlassCard";
+import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { Badge } from "@/components/ui/Badge";
+import { StatCard } from "@/components/ui/StatCard";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { LessonCard } from "@/components/ui/LessonCard";
+import { ActionList } from "@/components/ui/ActionList";
+import { EngagementCard } from "@/components/engagement/EngagementCard";
+import { DailyFact } from "@/components/engagement/DailyFact";
+import { LoadingBlock } from "@/components/ui/Skeleton";
+import { LessonScoreChart } from "@/components/charts/LessonScoreChart";
 import { ALL_MODULES } from "@/data/modules";
+import { formatVideoLength } from "@/data/lessonVideos";
+import { useLessons } from "@/components/providers/LessonsProvider";
 import { useAuthStore } from "@/lib/authStore";
-import { getQuizAttempts } from "@/lib/dataStore";
-import { BookOpen, Flame, Trophy, Target, ArrowRight } from "lucide-react";
+import { buildStudentPlan, studentLessonScores } from "@/lib/studentPlan";
+import { loadStudentStats, type StudentStats } from "@/lib/studentStats";
+import { getDiagnosticAttempts } from "@/lib/dataStore";
+import type { ActionItem } from "@/lib/types";
+import { ArrowRight } from "lucide-react";
 
 export default function StudentDashboard() {
   const user = useAuthStore((s) => s.user);
+  const { modules } = useLessons();
   const [completedModuleIds, setCompletedModuleIds] = useState<number[]>([]);
+  const [scores, setScores] = useState<(number | null)[] | null>(null);
+  const [plan, setPlan] = useState<ActionItem[] | null>(null);
+  const [stats, setStats] = useState<StudentStats | null>(null);
+  // `null` until known, so the banner does not flash up for someone who has already sat it.
+  const [needsPreTest, setNeedsPreTest] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!user) return;
-    getQuizAttempts(user.uid).then((attempts) => {
-      const ids = Array.from(new Set(attempts.filter((a) => a.score >= a.total * 0.6).map((a) => a.moduleId)));
-      setCompletedModuleIds(ids);
+    getDiagnosticAttempts(user.uid)
+      .then((a) => setNeedsPreTest(!a.some((x) => x.phase === "pre")))
+      .catch(() => setNeedsPreTest(null));
+    studentLessonScores(user.uid).then((s) => {
+      setScores(s);
+      setCompletedModuleIds(
+        ALL_MODULES.filter((_, i) => (s[i] ?? -1) >= 60).map((m) => m.id)
+      );
     });
+    buildStudentPlan(user.uid).then(setPlan);
+    loadStudentStats(user.uid).then(setStats);
   }, [user]);
 
   const progressPercent = Math.round((completedModuleIds.length / ALL_MODULES.length) * 100);
 
   return (
-    <DashboardShell>
+    <DashboardShell role="student">
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold">Қош келдің, {user?.fullName?.split(" ")[0] ?? "Студент"}! 👋</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Механика курсындағы прогресіңді осында бақыла.</p>
-          </div>
-          <Link href="/modules" className="btn-primary">
-            Оқуды жалғастыру <ArrowRight size={16} />
+        <SectionHeader
+          as="h1"
+          title={`Қош келдің, ${user?.fullName?.split(" ")[0] ?? "Студент"}`}
+          description="Механика курсындағы прогресіңді осында бақыла."
+          action={
+            <Link href="/modules" className="btn-primary">
+              Оқуды жалғастыру <ArrowRight size={16} />
+            </Link>
+          }
+        />
+
+        {needsPreTest && (
+          <Link
+            href="/diagnostic"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-brand-400/40 bg-brand-500/10 px-4 py-3 text-body text-slate-800 transition-colors hover:bg-brand-500/15 dark:text-slate-100"
+          >
+            <span>
+              <strong>Бастапқы диагностиканы тапсырыңыз</strong> — курстың басындағы деңгейіңізді өлшейтін 20 сұрақ.
+              Оқуды бастамас бұрын тапсырған жөн.
+            </span>
+            <ArrowRight size={18} className="shrink-0" />
           </Link>
+        )}
+
+        <EngagementCard />
+
+        <DailyFact />
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Аяқталған сабақтар"
+            value={`${completedModuleIds.length}/${ALL_MODULES.length}`}
+            context={`Курстың ${progressPercent}%-ы`}
+            tone="brand"
+          />
+          <StatCard
+            label="Құзыреттілік деңгейі"
+            value={stats?.competencyPercent ?? "—"}
+            unit={stats?.competencyPercent != null ? "%" : undefined}
+            context={
+              stats?.competencyPercent != null
+                ? "10 критерий бойынша рубрика"
+                : "Өзін-өзі бағалаудан өтпегенсіз"
+            }
+            tone="emerald"
+          />
+          <StatCard
+            label="Жинаған ұпай"
+            value={user?.xp ?? 0}
+            unit="XP"
+            context="Викторина, ойын және БӨЖ үшін"
+            tone="amber"
+          />
+          {/* Was a hardcoded "5 күн" streak with nothing behind it. Sessions are
+              not logged anywhere, so this shows a figure that is actually
+              recorded instead. */}
+          <StatCard
+            label="Орташа ұпай"
+            value={stats?.quizAverage ?? "—"}
+            unit={stats?.quizAverage != null ? "%" : undefined}
+            context={
+              stats?.attempted
+                ? `${stats.attempted} тапсырылған викторина бойынша`
+                : "Әлі викторина тапсырылмаған"
+            }
+          />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <GlassCard>
-            <BookOpen className="mb-2 text-brand-500" />
-            <p className="text-2xl font-bold">{completedModuleIds.length}/{ALL_MODULES.length}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Аяқталған сабақтар</p>
-          </GlassCard>
-          <GlassCard>
-            <Target className="mb-2 text-emerald-500" />
-            <p className="text-2xl font-bold">{user?.competencyScore ?? 0}%</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Құзыреттілік деңгейі</p>
-          </GlassCard>
-          <GlassCard>
-            <Trophy className="mb-2 text-amber-500" />
-            <p className="text-2xl font-bold">{user?.xp ?? 0}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Жинаған XP ұпайы</p>
-          </GlassCard>
-          <GlassCard>
-            <Flame className="mb-2 text-rose-500" />
-            <p className="text-2xl font-bold">5 күн</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">Оқу серия (streak)</p>
-          </GlassCard>
-        </div>
+        <Card>
+          <p className="mb-3 text-h3">Жалпы курс прогресі</p>
+          <ProgressBar
+            value={progressPercent}
+            segments={ALL_MODULES.length}
+            tone="emerald"
+            label="Аяқталған сабақтар"
+          />
+        </Card>
 
-        <GlassCard>
-          <p className="mb-2 font-semibold">Жалпы курс прогресі</p>
-          <ProgressBar value={progressPercent} label="Барлық сабақтар бойынша" />
-        </GlassCard>
+        {/* Personal plan — the same "what to do next" idea the teacher sees
+            for the whole cohort, but built from this student's own quiz
+            attempts and submissions (see src/lib/studentPlan.ts), so it never
+            contradicts the progress numbers above it. */}
+        <section>
+          <SectionHeader
+            title="Өзіндік жұмыс жоспары"
+            description="Соңғы нәтижелерің бойынша жасалған жеке ұсыныстар — келесі не істеу керегін осыдан көресің."
+          />
+          <div className="mt-3">
+            {plan ? (
+              <ActionList items={plan} emptyMessage="Қазір бәрі ретте — жаңа тапсырма пайда болғанда осында көрінеді." />
+            ) : (
+              <LoadingBlock lines={3} />
+            )}
+          </div>
+        </section>
+
+        <Card>
+          <p className="mb-1 text-h3">Сабақтар бойынша ұпайларың</p>
+          <p className="mb-4 text-micro text-slate-600 dark:text-slate-400">
+            Әр бағанға тінтуірді апарып нақты пайызды көр. Сұр баған — әлі тапсырылмаған сабақ.
+          </p>
+          {scores ? (
+            <LessonScoreChart values={scores} label="Ұпайың, %" />
+          ) : (
+            <LoadingBlock lines={3} />
+          )}
+        </Card>
 
         <div>
-          <h2 className="mb-3 text-lg font-semibold">Оқу сабақтары</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {ALL_MODULES.map((m) => {
-              const done = completedModuleIds.includes(m.id);
-              return (
-                <Link key={m.id} href={`/modules/${m.id}`} className="glass-card block">
-                  <div className={`mb-3 h-24 rounded-xl bg-gradient-to-br ${m.colorFrom} ${m.colorTo} p-3 text-white`}>
-                    <p className="text-xs opacity-80">Сабақ {m.id}</p>
-                    <p className="font-semibold">{m.title}</p>
-                  </div>
-                  <p className="line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{m.shortDescription}</p>
-                  <div className="mt-3 flex items-center justify-between">
-                    {done ? <Badge variant="success">Аяқталды</Badge> : <Badge>Оқу керек</Badge>}
-                    <span className="text-xs text-slate-400">{m.videoDurationMinutes} мин</span>
-                  </div>
-                </Link>
-              );
-            })}
+          <SectionHeader title="Оқу сабақтары" />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {modules.map((m) => (
+              <LessonCard
+                key={m.id}
+                id={m.id}
+                title={m.title}
+                description={m.shortDescription}
+                length={formatVideoLength(m.videoDurationSeconds)}
+                done={completedModuleIds.includes(m.id)}
+              />
+            ))}
           </div>
         </div>
 
-        {user?.badges && user.badges.length > 0 && (
-          <GlassCard>
-            <p className="mb-2 font-semibold">Жетістіктерің</p>
-            <div className="flex flex-wrap gap-2">
-              {user.badges.map((b) => (
-                <Badge key={b}>🏅 {b}</Badge>
-              ))}
-            </div>
-          </GlassCard>
-        )}
       </div>
     </DashboardShell>
   );

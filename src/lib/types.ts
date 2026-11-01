@@ -10,10 +10,56 @@ export interface AppUser {
   role: UserRole;
   avatarUrl?: string;
   group?: string; // student group / cohort
+  /** Short shareable handle, e.g. STU-7K3M2A. Assigned at signup, immutable. */
+  userCode?: string;
+  /**
+   * False only between an OAuth signup and the moment its owner picks a role.
+   * A Google sign-in has no form to carry the choice, so the profile starts
+   * provisional and `/auth/callback` asks. Everything else is born locked.
+   */
+  roleLocked?: boolean;
   createdAt: string;
   competencyScore?: number; // 0-100 aggregate
   badges?: string[];
   xp?: number;
+}
+
+// --- Teacher ↔ student graph ------------------------------------------------
+
+/** A request is pending until the *other* party answers it. */
+export type LinkStatus = "pending" | "accepted" | "declined";
+
+/**
+ * The public face of a person: what a search result or a request card shows.
+ * Deliberately excludes the email — see the search_people RPC.
+ */
+export interface PersonSummary {
+  id: string;
+  fullName: string;
+  userCode: string;
+  role: UserRole;
+  studyGroup?: string | null;
+  avatarUrl?: string | null;
+  /** Set when an edge with the current user already exists. */
+  linkStatus?: LinkStatus | null;
+  /** Who opened that edge — tells the UI whose turn it is. */
+  requestedBy?: string | null;
+}
+
+/** One edge, as seen from the current user's side. */
+export interface TeacherLink {
+  id: string;
+  teacherId: string;
+  studentId: string;
+  status: LinkStatus;
+  requestedBy: string;
+  message?: string | null;
+  createdAt: string;
+  respondedAt?: string | null;
+  /** The other party. */
+  person: PersonSummary;
+  /** True when the current user must accept or decline. */
+  awaitingMe: boolean;
 }
 
 export interface BloomOutcomes {
@@ -50,7 +96,20 @@ export type GameType =
   | "puzzle"
   | "spinwheel"
   | "sorting"
-  | "conceptmap";
+  | "conceptmap"
+  | "speedquiz"
+  | "truefalse"
+  | "order"
+  | "blitz"
+  | "projectile"
+  | "coaster"
+  | "bow"
+  | "asyq"
+  | "tug"
+  | "rocket"
+  | "daily"
+  | "myth"
+  | "arena";
 
 export interface GamePair {
   left: string;
@@ -80,8 +139,9 @@ export interface LessonModule {
   slug: string;
   title: string;
   shortDescription: string;
-  youtubeId: string; // just the video id, admin-editable
-  videoDurationMinutes: number;
+  /** The lecture film: a root-relative path or https URL to an MP4/WebM. Teacher-editable. */
+  videoSrc: string;
+  videoDurationSeconds: number;
   objectives: string[];
   bloom: BloomOutcomes;
   lectureSummary: string[]; // paragraphs
@@ -91,8 +151,6 @@ export interface LessonModule {
   assignment: BOZhAssignment;
   quiz: QuizQuestion[];
   game: ModuleGame;
-  colorFrom: string;
-  colorTo: string;
 }
 
 export interface QuizAttempt {
@@ -152,6 +210,49 @@ export interface CompetencyAssessment {
   percent: number; // 0-100
   assessedAt: string;
   assessorType: "self" | "ai" | "teacher";
+}
+
+/** `pre` is taken before the course, `post` after it — the same instrument both times. */
+export type DiagnosticPhase = "pre" | "post";
+
+/** One sitting of the diagnostic test. A student has at most one per phase. */
+export interface DiagnosticAttempt {
+  id: string;
+  userId: string;
+  phase: DiagnosticPhase;
+  score: number; // correct answers
+  total: number;
+  answers: { questionId: string; chosenIndex: number; correct: boolean }[];
+  takenAt: string;
+}
+
+/** How sure the student said they were before seeing the measurement: 1 = no idea, 2 = fairly, 3 = certain. */
+export type Confidence = 1 | 2 | 3;
+
+/** One prediction made before looking (src/data/predictions.ts). Append-only, like the diagnostic. */
+export interface PredictionAttempt {
+  id: string;
+  userId: string;
+  itemId: string;
+  optionId: string;
+  correct: boolean;
+  /** The misconception the chosen option expresses; null when it was right. */
+  misconception: string | null;
+  confidence: Confidence;
+  createdAt: string;
+}
+
+export type SensorKind = "rest-g" | "jump" | "pendulum" | "elevator";
+
+/** A measurement made with the phone's own sensors (src/lib/sensors/analysis.ts). */
+export interface SensorResult {
+  id: string;
+  userId: string;
+  kind: SensorKind;
+  value: number;
+  unit: string;
+  details: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface FinalGradeBreakdown {
@@ -217,4 +318,27 @@ export interface AnalyticsSnapshot {
   quizAverages: number[]; // per module
   competencyRadar: { criterion: RubricCriterionKey; value: number }[];
   timeSpentTotalMinutes: number;
+}
+
+export type ActionSeverity = "critical" | "warning" | "info";
+
+/**
+ * One row in a "what to do next" list. Shared shape for both the teacher's
+ * cohort-wide recommendations (src/data/recommendations.ts, built from mock
+ * aggregate data) and each student's personal plan (src/lib/studentPlan.ts,
+ * built from their own real quiz attempts and submissions).
+ */
+export interface ActionItem {
+  id: string;
+  severity: ActionSeverity;
+  /** Short category shown as a chip, e.g. "Қайталау", "БӨЖ". */
+  kind: string;
+  title: string;
+  /** Why this surfaced — the evidence, in numbers. */
+  evidence: string;
+  /** The concrete next step. */
+  action: string;
+  href?: string;
+  /** People or lessons the item refers to. */
+  names?: string[];
 }

@@ -2,7 +2,10 @@
 // Modules 1-2 are fully authored (thesis demo depth). Modules 3-10 use the
 // same schema with lighter-but-real content — an administrator/teacher can
 // extend them later from the Teacher Dashboard without touching code.
-import type { LessonModule } from "@/lib/types";
+import type { LessonModule, QuizQuestion } from "@/lib/types";
+import { seededShuffle } from "@/lib/rng";
+import { lessonVideoSeconds, lessonVideoSrc } from "./lessonVideos";
+import { EXTRA_QUIZ_SEEDS } from "./quizBank";
 
 export const MODULES: LessonModule[] = [
   // ==========================================================
@@ -14,8 +17,8 @@ export const MODULES: LessonModule[] = [
     title: "Механикаға кіріспе",
     shortDescription:
       "Механика ғылымының пәні, негізгі ұғымдары және қолданылу аясымен танысу.",
-    youtubeId: "b1t41Q3xRM8",
-    videoDurationMinutes: 14,
+    videoSrc: lessonVideoSrc(1),
+    videoDurationSeconds: lessonVideoSeconds(1),
     objectives: [
       "Механика ғылымының не екенін және оның бөлімдерін атай білу",
       "Дене, материалдық нүкте, санақ жүйесі ұғымдарын түсіндіру",
@@ -89,8 +92,6 @@ export const MODULES: LessonModule[] = [
         { left: "Санақ жүйесі", right: "Координаттар мен уақыт есептеу тәсілі" },
       ],
     },
-    colorFrom: "from-blue-500",
-    colorTo: "to-indigo-600",
   },
 
   // ==========================================================
@@ -102,8 +103,8 @@ export const MODULES: LessonModule[] = [
     title: "Кинематика",
     shortDescription:
       "Дене қозғалысын, оның себептерін ескермей, жылдамдық пен үдеу арқылы сипаттау.",
-    youtubeId: "MG-oJydUpiw",
-    videoDurationMinutes: 18,
+    videoSrc: lessonVideoSrc(2),
+    videoDurationSeconds: lessonVideoSeconds(2),
     objectives: [
       "Жылдамдық пен үдеу ұғымдарын анықтап, формулаларын жаза білу",
       "Түзу сызықты бірқалыпты және бірқалыпты үдемелі қозғалыс графиктерін тұрғызу",
@@ -178,8 +179,6 @@ export const MODULES: LessonModule[] = [
         { left: "Соңғы жылдамдық", right: "v = v₀ + at" },
       ],
     },
-    colorFrom: "from-cyan-500",
-    colorTo: "to-blue-600",
   },
 ];
 
@@ -191,15 +190,12 @@ interface TemplateSeed {
   slug: string;
   title: string;
   shortDescription: string;
-  youtubeId: string;
   keyConcepts: string[];
   glossary: { term: string; definition: string }[];
   scenario: string;
   tasks: string[];
   quizSeeds: { q: string; correct: string; wrong: string[]; explanation: string }[];
   gamePairs: { left: string; right: string }[];
-  colorFrom: string;
-  colorTo: string;
 }
 
 const TEMPLATE_SEEDS: TemplateSeed[] = [
@@ -208,7 +204,6 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
     slug: "dinamika",
     title: "Динамика",
     shortDescription: "Күштер мен қозғалыс арасындағы байланысты зерттеу.",
-    youtubeId: "kKKM8Y-u7ds",
     keyConcepts: ["Күш", "Масса", "Инерттілік", "Импульс"],
     glossary: [
       { term: "Күш", definition: "Дененің жылдамдығын өзгертетін немесе оны деформациялайтын әсер." },
@@ -230,15 +225,12 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "Масса", right: "Инерттілік өлшемі" },
       { left: "Инерция", right: "Қозғалыс күйін сақтау қасиеті" },
     ],
-    colorFrom: "from-violet-500",
-    colorTo: "to-purple-600",
   },
   {
     id: 4,
     slug: "newton-zandary",
     title: "Ньютон заңдары",
     shortDescription: "Классикалық механиканың негізгі үш заңы.",
-    youtubeId: "AVghDU9zt5w",
     keyConcepts: ["Ньютонның І заңы", "Ньютонның ІІ заңы", "Ньютонның ІІІ заңы"],
     glossary: [
       { term: "Инерциялық жүйе", definition: "Ньютонның бірінші заңы орындалатын санақ жүйесі." },
@@ -259,15 +251,12 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "2-заң", right: "F = ma" },
       { left: "3-заң", right: "Әсер = −кері әсер" },
     ],
-    colorFrom: "from-rose-500",
-    colorTo: "to-pink-600",
   },
   {
     id: 5,
     slug: "zhumys-energiya",
     title: "Жұмыс және энергия",
     shortDescription: "Механикалық жұмыс, қуат және энергияның сақталу заңы.",
-    youtubeId: "w4QFJb9a8vo",
     keyConcepts: ["Жұмыс", "Қуат", "Кинетикалық энергия", "Потенциалдық энергия"],
     glossary: [
       { term: "Жұмыс", definition: "Күш пен орын ауыстырудың скаляр көбейтіндісі, A = F·s·cosα." },
@@ -289,15 +278,12 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "Кинетикалық энергия", right: "Ek = mv²/2" },
       { left: "Потенциалдық энергия", right: "Ep = mgh" },
     ],
-    colorFrom: "from-amber-500",
-    colorTo: "to-orange-600",
   },
   {
     id: 6,
     slug: "impuls",
     title: "Импульс",
     shortDescription: "Дене импульсі және импульстің сақталу заңы.",
-    youtubeId: "gp8yPY6Vgy4",
     keyConcepts: ["Дене импульсі", "Импульстің сақталу заңы", "Соққы (соударение)"],
     glossary: [
       { term: "Импульс", definition: "Дене массасы мен жылдамдығының көбейтіндісі, p = mv." },
@@ -318,15 +304,12 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "Серпімді соққы", right: "Энергия сақталады" },
       { left: "Серпімсіз соққы", right: "Денелер бірігеді" },
     ],
-    colorFrom: "from-emerald-500",
-    colorTo: "to-teal-600",
   },
   {
     id: 7,
     slug: "aynalmaly-qozgalys",
     title: "Айналмалы қозғалыс",
     shortDescription: "Дененің өз білігі немесе орталық нүкте айналасындағы қозғалысы.",
-    youtubeId: "F5abg7g5UWU",
     keyConcepts: ["Бұрыштық жылдамдық", "Центрге тартқыш үдеу", "Инерция моменті"],
     glossary: [
       { term: "Бұрыштық жылдамдық", definition: "Бұрыштың уақыт бойынша өзгеру жылдамдығы, ω = φ/t." },
@@ -347,15 +330,12 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "Центрге тартқыш үдеу", right: "a = v²/r" },
       { left: "Период", right: "Бір айналымға кеткен уақыт" },
     ],
-    colorFrom: "from-sky-500",
-    colorTo: "to-cyan-600",
   },
   {
     id: 8,
     slug: "tербelister",
     title: "Тербелістер",
     shortDescription: "Периодты қозғалыстар: маятниктер мен серпімді тербелістер.",
-    youtubeId: "h2WT2b0MhIw",
     keyConcepts: ["Амплитуда", "Период мен жиілік", "Математикалық маятник", "Серпімді тербеліс"],
     glossary: [
       { term: "Амплитуда", definition: "Тербеліс кезіндегі ең үлкен ауытқу шамасы." },
@@ -377,15 +357,12 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "Период", right: "Бір тербеліске кеткен уақыт" },
       { left: "Жиілік", right: "f = 1/T" },
     ],
-    colorFrom: "from-fuchsia-500",
-    colorTo: "to-purple-600",
   },
   {
     id: 9,
     slug: "suiyqtar-mehanikasy",
     title: "Сұйықтар механикасы",
     shortDescription: "Гидростатика мен гидродинамиканың негіздері.",
-    youtubeId: "jZaRz_deiPY",
     keyConcepts: ["Қысым", "Архимед заңы", "Паскаль заңы", "Үздіксіздік теңдеуі"],
     glossary: [
       { term: "Қысым", definition: "Күштің бетке перпендикуляр әсер ету шамасы, P = F/S." },
@@ -406,15 +383,12 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "Архимед заңы", right: "Итергіш күш" },
       { left: "Паскаль заңы", right: "Қысымның бірдей таралуы" },
     ],
-    colorFrom: "from-teal-500",
-    colorTo: "to-emerald-600",
   },
   {
     id: 10,
     slug: "ingenerlik-mehanika",
     title: "Инженерлік механика",
     shortDescription: "Механика заңдарын нақты инженерлік конструкцияларда қолдану.",
-    youtubeId: "K3B6P0KomVE",
     keyConcepts: ["Кернеу және деформация", "Иілу моменті", "Конструкция беріктігі"],
     glossary: [
       { term: "Кернеу", definition: "Ішкі күштің дене қимасының ауданына қатынасы." },
@@ -435,8 +409,6 @@ const TEMPLATE_SEEDS: TemplateSeed[] = [
       { left: "Деформация", right: "Пішін өзгерісі" },
       { left: "Иілу моменті", right: "Июші әсер" },
     ],
-    colorFrom: "from-slate-500",
-    colorTo: "to-gray-700",
   },
 ];
 
@@ -446,8 +418,8 @@ function buildTemplateModule(seed: TemplateSeed): LessonModule {
     slug: seed.slug,
     title: seed.title,
     shortDescription: seed.shortDescription,
-    youtubeId: seed.youtubeId,
-    videoDurationMinutes: 12,
+    videoSrc: lessonVideoSrc(seed.id),
+    videoDurationSeconds: lessonVideoSeconds(seed.id),
     objectives: [
       `${seed.title} тақырыбының негізгі ұғымдарын анықтау`,
       `${seed.title} бойынша формулаларды практикалық есептерге қолдану`,
@@ -492,15 +464,38 @@ function buildTemplateModule(seed: TemplateSeed): LessonModule {
       instructions: "Сол жақтағы терминді оң жақтағы дұрыс анықтамасымен сәйкестендір.",
       pairs: seed.gamePairs,
     },
-    colorFrom: seed.colorFrom,
-    colorTo: seed.colorTo,
+  };
+}
+
+/**
+ * The lesson with the extra questions of src/data/quizBank.ts appended to the
+ * ones it was written with. They are numbered on from the last existing id, so
+ * an id never changes meaning if the bank is extended later.
+ */
+function withQuizBank(m: LessonModule): LessonModule {
+  const extra = EXTRA_QUIZ_SEEDS[m.id] ?? [];
+  if (extra.length === 0) return m;
+  return {
+    ...m,
+    quiz: [
+      ...m.quiz,
+      ...extra.map((qs, idx) => ({
+        id: `m${m.id}q${m.quiz.length + idx + 1}`,
+        question: qs.q,
+        options: [qs.correct, ...qs.wrong],
+        correctIndex: 0,
+        explanation: qs.explanation,
+      })),
+    ],
   };
 }
 
 export const ALL_MODULES: LessonModule[] = [
   ...MODULES,
   ...TEMPLATE_SEEDS.map(buildTemplateModule),
-].sort((a, b) => a.id - b.id);
+]
+  .map(withQuizBank)
+  .sort((a, b) => a.id - b.id);
 
 export function getModuleById(id: number): LessonModule | undefined {
   return ALL_MODULES.find((m) => m.id === id);
@@ -520,18 +515,46 @@ export function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
-// Also shuffles each question's option order (keeping correctIndex accurate).
+/** How many questions one sitting of a lesson quiz has. */
+export const QUIZ_LENGTH = 10;
+
+/** How many questions a quiz sitting made from `bank` will have. */
+export function quizLength(bank: readonly unknown[]): number {
+  return Math.min(QUIZ_LENGTH, bank.length);
+}
+
+/**
+ * One sitting of a quiz: `count` questions picked at random from the bank, each
+ * with its options in a new order (correctIndex kept accurate).
+ *
+ * A lesson now carries a bank of fifteen questions and a sitting is ten of them,
+ * so a retry is a different quiz and not the same questions reshuffled. A bank
+ * of ten or fewer — lessons a teacher has rewritten — is used whole.
+ *
+ * `rnd` is injectable so the draw can be tested; it defaults to Math.random.
+ */
+export function drawQuiz(
+  bank: readonly QuizQuestion[],
+  count: number = QUIZ_LENGTH,
+  rnd: () => number = Math.random
+): QuizQuestion[] {
+  return seededShuffle(bank, rnd)
+    .slice(0, count)
+    .map((q) => {
+      const shuffled = seededShuffle(
+        q.options.map((opt, i) => ({ opt, i })),
+        rnd
+      );
+      return {
+        ...q,
+        options: shuffled.map((o) => o.opt),
+        correctIndex: shuffled.findIndex((o) => o.i === q.correctIndex),
+      };
+    });
+}
+
+/** A sitting of the lesson as it ships. The quiz page draws from the (teacher-edited) lesson instead. */
 export function randomizeQuiz(moduleId: number) {
   const mod = getModuleById(moduleId);
-  if (!mod) return [];
-  return shuffle(mod.quiz).map((q) => {
-    const optionsWithIndex = q.options.map((opt, i) => ({ opt, i }));
-    const shuffled = shuffle(optionsWithIndex);
-    const newCorrectIndex = shuffled.findIndex((o) => o.i === q.correctIndex);
-    return {
-      ...q,
-      options: shuffled.map((o) => o.opt),
-      correctIndex: newCorrectIndex,
-    };
-  });
+  return mod ? drawQuiz(mod.quiz) : [];
 }

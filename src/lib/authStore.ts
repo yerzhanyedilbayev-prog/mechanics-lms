@@ -1,6 +1,6 @@
 // Lightweight client auth/session store. In mock mode it simulates a signed
-// in demo user; when Firebase Auth is configured this would be populated by
-// onAuthStateChanged (wired in AppProviders).
+// in demo user; when Supabase is configured it is populated from the Supabase
+// session instead (wired in AppProviders).
 "use client";
 import { create } from "zustand";
 import type { AppUser } from "./types";
@@ -46,6 +46,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
       const next = !s.darkMode;
       if (typeof document !== "undefined") {
         document.documentElement.classList.toggle("dark", next);
+        // Persisted, so the choice survives a reload — AppProviders reads it.
+        window.localStorage.setItem("mechanics-lms:darkMode", String(next));
       }
       return { darkMode: next };
     }),

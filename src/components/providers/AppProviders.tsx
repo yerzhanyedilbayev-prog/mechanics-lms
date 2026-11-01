@@ -1,51 +1,63 @@
 "use client";
 
 import { useEffect } from "react";
-import { onAuthStateChanged, type User } from "firebase/auth";
-import { auth, isFirebaseConfigured } from "@/lib/firebase";
-import { useAuthStore, DEMO_STUDENT } from "@/lib/authStore";
-import { getCurrentUserProfile, upsertUserProfile } from "@/lib/dataStore";
+import { useAuthStore } from "@/lib/authStore";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
+import { fetchProfile, readMockSession } from "@/lib/supabase/accounts";
+import { LessonsProvider } from "./LessonsProvider";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const setUser = useAuthStore((s) => s.setUser);
-  const setLoading = useAuthStore((s) => s.setLoading);
 
   useEffect(() => {
-    // Restore dark mode preference
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem("mechanics-lms:darkMode") : null;
-    if (stored === "true") {
-      document.documentElement.classList.add("dark");
-      useAuthStore.setState({ darkMode: true });
-    }
+    // The redesign is dark-first, so dark is the default rather than an
+    // opt-in; only an explicit "false" from a previous session turns it off.
+    const stored = window.localStorage.getItem("mechanics-lms:darkMode");
+    const dark = stored === null ? true : stored === "true";
+    document.documentElement.classList.toggle("dark", dark);
+    useAuthStore.setState({ darkMode: dark });
   }, []);
 
   useEffect(() => {
-    if (isFirebaseConfigured && auth) {
-      const unsub = onAuthStateChanged(auth, async (fbUser: User | null) => {
-        if (fbUser) {
-          let profile = await getCurrentUserProfile(fbUser.uid);
-          if (!profile) {
-            profile = {
-              uid: fbUser.uid,
-              fullName: fbUser.displayName ?? "Қолданушы",
-              email: fbUser.email ?? "",
-              role: "student",
-              createdAt: new Date().toISOString(),
-              xp: 0,
-              badges: [],
-            };
-            await upsertUserProfile(profile);
-          }
-          setUser(profile);
-        } else {
-          setUser(null);
-        }
-      });
-      return () => unsub();
-    }
-    // Mock mode: auto sign in the demo student so every page is explorable.
-    setUser(DEMO_STUDENT);
-  }, [setUser, setLoading]);
+    if (isSupabaseConfigured && supabase) {
+      const sb = supabase;
+      let cancelled = false;
 
-  return <>{children}</>;
+      // Resolve the session that already exists (a reload), then keep following
+      // it. The profile row is the source of truth for the role, not the JWT:
+      // the role lives in `profiles` where a trigger keeps it immutable.
+      const load = async (userId: string | undefined) => {
+        if (!userId) {
+          if (!cancelled) setUser(null);
+          return;
+        }
+        try {
+          const profile = await fetchProfile(userId);
+          if (!cancelled) setUser(profile);
+        } catch {
+          if (!cancelled) setUser(null);
+        }
+      };
+
+      sb.auth.getSession().then(({ data }) => load(data.session?.user.id));
+
+      const { data: sub } = sb.auth.onAuthStateChange((_event, session) => {
+        load(session?.user.id);
+      });
+
+      return () => {
+        cancelled = true;
+        sub.subscription.unsubscribe();
+      };
+    }
+
+    // No backend configured: restore whichever demo identity was last chosen on
+    // the login screen. Nobody is signed in until they pick one, so the role
+    // selection is exercised in demo mode too.
+    setUser(readMockSession());
+  }, [setUser]);
+
+  // Nested inside, not beside: the lesson overrides that apply depend on who
+  // is signed in, so this provider needs the auth state to have settled first.
+  return <LessonsProvider>{children}</LessonsProvider>;
 }
